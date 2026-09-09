@@ -55,7 +55,7 @@ export function HuntRail() {
       </div>
     </div>
   );
-
+}
 
 function Chip({
   symbol,
