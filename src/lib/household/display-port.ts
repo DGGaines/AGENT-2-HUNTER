@@ -6,12 +6,12 @@
  * To wire a real yield account later: replace this module. Keep the functions.
  * UI must not branch on HOUSEHOLD_TRANSFER_MODE.
  */
-import { HOUSEHOLD_TRANSFER_MODE } from "../config.ts";
-import type { HouseSymbol } from "../config.ts";
+import { HOUSEHOLD_TRANSFER_MODE, LEDGER_SEEDS, XMONEY_SEED } from "../config.ts";
 
 export type LedgerLine = {
-  symbol: HouseSymbol;
+  symbol: string;
   qty: number;
+  geckoId: string;
 };
 
 export type XMoneyView = {
@@ -22,6 +22,7 @@ export type XMoneyView = {
   month: number;
   lifetime: number;
   daily: number;
+  nextPayout: string;
 };
 
 export type HouseholdState = {
@@ -34,21 +35,16 @@ export function defaultHousehold(): HouseholdState {
   return {
     mode: HOUSEHOLD_TRANSFER_MODE,
     xMoney: {
-      balance: 0,
-      apr: 0.06,
+      balance: XMONEY_SEED.balance,
+      apr: XMONEY_SEED.apr,
       thisHour: 0,
       today: 0,
-      month: 0,
-      lifetime: 0,
-      daily: 0,
+      month: XMONEY_SEED.month,
+      lifetime: XMONEY_SEED.lifetime,
+      daily: XMONEY_SEED.balance * (XMONEY_SEED.apr / 365),
+      nextPayout: XMONEY_SEED.nextPayout,
     },
-    ledger: [
-      { symbol: "BTC", qty: 0 },
-      { symbol: "ETH", qty: 0 },
-      { symbol: "XRP", qty: 0 },
-      { symbol: "XLM", qty: 0 },
-      { symbol: "HBAR", qty: 0 },
-    ],
+    ledger: LEDGER_SEEDS.map((l) => ({ symbol: l.symbol, qty: l.qty, geckoId: l.geckoId })),
   };
 }
 
@@ -82,11 +78,7 @@ export function accrueDisplay(state: HouseholdState, hours: number): HouseholdSt
   };
 }
 
-export function setLedgerQty(
-  state: HouseholdState,
-  symbol: HouseSymbol,
-  qty: number,
-): HouseholdState {
+export function setLedgerQty(state: HouseholdState, symbol: string, qty: number): HouseholdState {
   const q = Number.isFinite(qty) && qty >= 0 ? qty : 0;
   return {
     ...state,

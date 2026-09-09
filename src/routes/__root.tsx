@@ -14,7 +14,7 @@ export const Route = createRootRoute({
       { name: "theme-color", content: "#07060c" },
       {
         name: "description",
-        content: "Paper hunter desk. If it cannot be sold, it is not a candidate.",
+        content: "Paper multi-asset hunter. If it cannot be sold at clip, it is not a candidate.",
       },
     ],
     links: [

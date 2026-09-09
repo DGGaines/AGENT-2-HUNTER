@@ -37,26 +37,15 @@ export function DeskHeader() {
       </div>
 
       <div className="text-center font-ui text-[11px] tracking-[0.16em] text-muted">
-        PAPER · NO QUEUE · GECKO+KRAKEN TAPE · 1H
+        PAPER · MULTI-VENUE · ONE ENGINE
         {snap.miss ? <span className="ml-2 text-halt">· MISS</span> : null}
+        <span className="ml-2 text-dim">{snap.killRung.toUpperCase()}</span>
       </div>
 
       <div className="flex flex-wrap items-end justify-between gap-4 lg:justify-end">
-        <Metric
-          label="EQUITY (NET)"
-          value={money(snap.equityCents)}
-          tone="mint"
-        />
-        <Metric
-          label="TODAY"
-          value={signedMoney(snap.todayPnlCents)}
-          tone={pnlUp ? "mint" : "halt"}
-        />
-        <Metric
-          label="DAY P&L"
-          value={pct(snap.todayPnlPct * 100)}
-          tone={pnlUp ? "mint" : "halt"}
-        />
+        <Metric label="EQUITY (NET)" value={money(snap.equityCents)} tone="mint" />
+        <Metric label="TODAY" value={signedMoney(snap.todayPnlCents)} tone={pnlUp ? "mint" : "halt"} />
+        <Metric label="DAY P&L" value={pct(snap.todayPnlPct * 100)} tone={pnlUp ? "mint" : "halt"} />
         <div className="text-right">
           <div className="text-[10px] tracking-[0.16em] text-muted">HEARTBEAT</div>
           <div className="flex items-center justify-end gap-1.5 font-mono text-sm text-halt">
@@ -64,7 +53,7 @@ export function DeskHeader() {
               ♥
             </span>
             {Math.round(snap.heartbeatAgeMs / 1000)}s
-            {snap.stale ? <span className="text-warn">STALE</span> : null}
+            <FeedBadge />
           </div>
         </div>
         <div className="flex gap-1">
@@ -77,6 +66,18 @@ export function DeskHeader() {
         </div>
       </div>
     </header>
+  );
+}
+
+function FeedBadge() {
+  const snap = useDesk((s) => s.snap);
+  const tone =
+    snap.feedHealth === "LIVE" ? "text-mint border-mint" : snap.feedHealth === "STALE" ? "text-warn border-warn" : "text-halt border-halt";
+  return (
+    <span className={cn("border px-1.5 py-0.5 font-ui text-[9px] tracking-[0.14em]", tone)}>
+      {snap.feedHealth}
+      {snap.latencyMs ? ` ${snap.latencyMs}ms` : ""}
+    </span>
   );
 }
 
@@ -102,12 +103,7 @@ function Clock({
       <div className={cn("text-[10px] tracking-[0.2em]", tone === "magenta" ? "text-magenta" : "text-halt")}>
         {label}
       </div>
-      <div
-        className={cn(
-          "font-mono text-lg tabular-nums",
-          tone === "magenta" ? "text-magenta" : "text-halt",
-        )}
-      >
+      <div className={cn("font-mono text-lg tabular-nums", tone === "magenta" ? "text-magenta" : "text-halt")}>
         {value}
       </div>
     </div>
@@ -126,12 +122,7 @@ function Metric({
   return (
     <div className="text-right">
       <div className="text-[10px] tracking-[0.16em] text-muted">{label}</div>
-      <div
-        className={cn(
-          "font-mono text-xl font-medium tabular-nums",
-          tone === "mint" ? "text-mint" : "text-halt",
-        )}
-      >
+      <div className={cn("font-mono text-xl font-medium tabular-nums", tone === "mint" ? "text-mint" : "text-halt")}>
         {value}
       </div>
     </div>

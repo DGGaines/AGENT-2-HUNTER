@@ -2,7 +2,6 @@ import {
   CLIP_CENTS,
   HONEYPOT_MIN_AGE_MIN,
   HONEYPOT_MIN_BUYS,
-  HOUSE_SYMBOLS,
   LAUNCH_MAX_AGE_MIN,
   MAX_BUY_SELL_RATIO,
   MAX_CLIP_IMPACT,
@@ -12,73 +11,108 @@ import {
   MIN_LIQ_USD,
   PUMP_MIN_CHANGE_1H,
 } from "../config.ts";
+import { clusterOf, rugStack, sellSimAtClip, socialTag, tapeComplete } from "../ports/intel.ts";
 import type { Candidate, GateCode } from "../types.ts";
 
-const HOUSE = new Set<string>(HOUSE_SYMBOLS);
+export type RawCandidate = Omit<
+  Candidate,
+  | "gate"
+  | "gateNote"
+  | "book"
+  | "impactAtClip"
+  | "social"
+  | "rug"
+  | "sellSim"
+  | "score"
+  | "softFlags"
+  | "intelComplete"
+  | "intelAsOf"
+  | "cluster"
+  | "deployerId"
+> & {
+  intelAsOf?: number;
+  deployerId?: string;
+  cluster?: string;
+  observedFlags?: Candidate["rug"]["flags"];
+};
 
-export function impactAtClip(liquidityUsd: number): number {
+export function impactAtClip(liquidityUsd: number, clipCents = CLIP_CENTS): number {
   if (liquidityUsd <= 0) return 1;
-  return CLIP_CENTS / 100 / liquidityUsd;
+  return clipCents / 100 / liquidityUsd;
 }
 
 export function classifyBook(c: {
   pairAgeMin: number;
   change1h: number;
+  venueKind: "dex" | "cex";
 }): "LAUNCH" | "PUMP" | "NONE" {
+  if (c.venueKind === "cex") {
+    return c.change1h >= PUMP_MIN_CHANGE_1H ? "PUMP" : "NONE";
+  }
   if (c.pairAgeMin <= LAUNCH_MAX_AGE_MIN) return "LAUNCH";
   if (c.change1h >= PUMP_MIN_CHANGE_1H) return "PUMP";
   return "NONE";
 }
 
-export function gateCandidate(raw: Omit<Candidate, "gate" | "gateNote" | "book" | "impactAtClip">): Candidate {
-  const impact = impactAtClip(raw.liquidityUsd);
-  const book = classifyBook(raw);
-  const { gate, gateNote } = evaluate(raw, impact);
-  return { ...raw, impactAtClip: impact, book, gate, gateNote };
+const STABLES = new Set(["USDT", "USDC", "DAI", "BUSD", "TUSD", "FDUSD", "USDE", "USDS", "USD1", "PYUSD"]);
+
+function scoreOf(
+  softFlags: string[],
+  social: Candidate["social"],
+  sellSim: Candidate["sellSim"],
+  change1h: number,
+): number {
+  let s = 0.72;
+  s += Math.min(0.22, Math.max(0, change1h) / 80);
+  s -= softFlags.length * 0.12;
+  if (social === "MIXED") s -= 0.18;
+  s -= Math.min(0.2, sellSim.impact * 4);
+  return Math.max(0.12, Math.min(0.95, s));
 }
 
-function evaluate(
-  c: Omit<Candidate, "gate" | "gateNote" | "book" | "impactAtClip">,
-  impact: number,
-): { gate: GateCode; gateNote: string } {
-  const sym = c.symbol.toUpperCase();
-  if (HOUSE.has(sym)) {
-    return { gate: "HOUSE_NAME", gateNote: "household satellite — hunter will not buy" };
-  }
-  if (!(c.priceUsd > 0)) {
-    return { gate: "NO_PRICE", gateNote: "no mark" };
-  }
-  if (c.liquidityUsd < MIN_LIQ_USD) {
+function evaluate(c: RawCandidate): {
+  gate: GateCode;
+  gateNote: string;
+  softFlags: string[];
+  social: Candidate["social"];
+  rug: Candidate["rug"];
+  sellSim: Candidate["sellSim"];
+  intelComplete: boolean;
+} {
+  const intelComplete = tapeComplete(c);
+  const sellSim = sellSimAtClip(c);
+  const social = socialTag(c);
+  const rug = rugStack({ ...c, sellSim, social, observedFlags: c.observedFlags });
+  const impact = sellSim.impact;
+  const softFlags: string[] = [];
+
+  if (STABLES.has(c.symbol.toUpperCase())) {
     return {
-      gate: "THIN_LP",
-      gateNote: `lp $${Math.round(c.liquidityUsd)} < $${MIN_LIQ_USD}`,
+      gate: "DENYLIST",
+      gateNote: "stable — not a hunt seat",
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
     };
   }
-  if (impact > MAX_CLIP_IMPACT) {
+
+  if (!intelComplete || !(c.priceUsd > 0)) {
     return {
-      gate: "IMPACT",
-      gateNote: `clip is ${(impact * 100).toFixed(1)}% of lp (max ${MAX_CLIP_IMPACT * 100}%)`,
+      gate: intelComplete ? "NO_PRICE" : "STALE_INTEL",
+      gateNote: intelComplete ? "no mark" : "missing/stale intel — no trade",
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
     };
   }
-  if (c.sells1h < MIN_H1_SELLS) {
-    return {
-      gate: "NO_SELLS",
-      gateNote: `${c.sells1h} sells in 1h — no observed exit`,
-    };
-  }
-  if (c.buys1h + c.sells1h < MIN_H1_TXNS) {
-    return { gate: "LOW_TXNS", gateNote: `${c.buys1h + c.sells1h} tx 1h` };
-  }
-  if (c.volume1h < MIN_H1_VOL_USD) {
-    return { gate: "LOW_VOL", gateNote: `vol 1h $${Math.round(c.volume1h)}` };
-  }
-  if (c.sells1h > 0 && c.buys1h / c.sells1h > MAX_BUY_SELL_RATIO) {
-    return {
-      gate: "WASH",
-      gateNote: `buy/sell ${ (c.buys1h / c.sells1h).toFixed(1) }`,
-    };
-  }
+
+  // Honeypot shape BEFORE generic NO_SELLS — must be reachable.
   if (
+    c.venueKind === "dex" &&
     c.pairAgeMin >= HONEYPOT_MIN_AGE_MIN &&
     c.sells1h === 0 &&
     c.buys1h >= HONEYPOT_MIN_BUYS
@@ -86,11 +120,142 @@ function evaluate(
     return {
       gate: "HONEYPOT_SHAPE",
       gateNote: "buys and no sells after 20m",
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
     };
   }
-  return { gate: "PASS", gateNote: "sellable at clip" };
+
+  if (rug.flags.includes("DENYLIST")) {
+    return { gate: "DENYLIST", gateNote: "public deny list", softFlags, social, rug, sellSim, intelComplete };
+  }
+  if (social === "INFLUENCER_DUMP" || social === "MIXED") {
+    return {
+      gate: "DUMP",
+      gateNote: `${social} — sketchy/dump hard refuse`,
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
+    };
+  }
+  if (rug.hard && rug.flags.includes("WASH") === false && rug.flags.includes("GOPLUS") === false) {
+    return { gate: "RUG", gateNote: rug.note, softFlags, social, rug, sellSim, intelComplete };
+  }
+
+  if (c.liquidityUsd < MIN_LIQ_USD && c.venueKind === "dex") {
+    return {
+      gate: "THIN_LP",
+      gateNote: `lp $${Math.round(c.liquidityUsd)} < $${MIN_LIQ_USD}`,
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
+    };
+  }
+  if (!sellSim.canExit) {
+    return {
+      gate: "SELL_SIM",
+      gateNote: sellSim.note,
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
+    };
+  }
+  if (impact > MAX_CLIP_IMPACT) {
+    return {
+      gate: "SELL_SIM",
+      gateNote: `clip is ${(impact * 100).toFixed(1)}% of depth (max ${MAX_CLIP_IMPACT * 100}%)`,
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
+    };
+  }
+  if (c.venueKind === "dex" && c.sells1h < MIN_H1_SELLS) {
+    return {
+      gate: "NO_SELLS",
+      gateNote: `${c.sells1h} sells in 1h — no observed exit`,
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
+    };
+  }
+  if (c.venueKind === "dex" && c.sells1h > 0 && c.buys1h / c.sells1h > MAX_BUY_SELL_RATIO) {
+    return {
+      gate: "WASH",
+      gateNote: `buy/sell ${(c.buys1h / c.sells1h).toFixed(1)}`,
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
+    };
+  }
+  if (c.venueKind === "dex" && c.buyers1h > 0 && c.buys1h / c.buyers1h >= 4) {
+    return {
+      gate: "BUNDLE",
+      gateNote: `buys/buyers ${(c.buys1h / c.buyers1h).toFixed(1)}`,
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
+    };
+  }
+  if (c.venueKind === "dex" && c.buys1h + c.sells1h < MIN_H1_TXNS) {
+    softFlags.push("LOW_TXNS");
+  }
+  if (c.volume1h < MIN_H1_VOL_USD) {
+    softFlags.push("LOW_VOL");
+  }
+
+  return {
+    gate: "PASS",
+    gateNote: softFlags.length ? `sellable · size down ${softFlags.join("+")}` : "sellable at clip",
+    softFlags,
+    social,
+    rug,
+    sellSim,
+    intelComplete,
+  };
+}
+
+export function gateCandidate(raw: RawCandidate): Candidate {
+  const book = classifyBook(raw);
+  const ev = evaluate(raw);
+  const score = ev.gate === "PASS" ? scoreOf(ev.softFlags, ev.social, ev.sellSim, raw.change1h) : 0;
+  return {
+    ...raw,
+    impactAtClip: ev.sellSim.impact,
+    book,
+    gate: ev.gate,
+    gateNote: ev.gateNote,
+    social: ev.social,
+    rug: ev.rug,
+    sellSim: ev.sellSim,
+    score,
+    softFlags: ev.softFlags,
+    intelComplete: ev.intelComplete,
+    intelAsOf: raw.intelAsOf ?? 0,
+    cluster: raw.cluster ?? clusterOf(raw),
+    deployerId: raw.deployerId ?? raw.mint,
+  };
 }
 
 export function canEnter(c: Candidate): boolean {
-  return c.gate === "PASS" && (c.book === "LAUNCH" || c.book === "PUMP");
+  return c.gate === "PASS" && c.intelComplete && c.intelAsOf > 0;
+}
+
+export function hardRefuse(c: Candidate): boolean {
+  return c.gate !== "PASS";
 }

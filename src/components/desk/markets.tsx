@@ -1,5 +1,6 @@
 import { moneyPx, pct } from "@/lib/format";
 import { useDesk } from "@/lib/desk-store";
+import { SellMeter } from "./sell-meter";
 
 type Tick = {
   key: string;
@@ -8,6 +9,33 @@ type Tick = {
   change: number;
   tag: string;
 };
+
+function Chip({
+  symbol,
+  px,
+  change,
+  tag,
+}: {
+  symbol: string;
+  px: number;
+  change: number;
+  tag: string;
+}) {
+  const up = change >= 0;
+  return (
+    <div className="flex shrink-0 items-center gap-2 px-2 py-0.5">
+      <span className="font-brand text-[11px] tracking-[0.12em] text-ink">{symbol}</span>
+      <span className="font-mono text-[11px] tabular-nums text-muted">{moneyPx(px)}</span>
+      <span className={up ? "font-mono text-[11px] text-mint" : "font-mono text-[11px] text-halt"}>
+        {pct(change)}
+      </span>
+      <span className="font-ui text-[9px] tracking-[0.14em] text-dim">{tag}</span>
+      <span className="text-line" aria-hidden>
+        /
+      </span>
+    </div>
+  );
+}
 
 export function HuntRail() {
   const hunt = useDesk((s) => s.snap.hunt);
@@ -19,7 +47,7 @@ export function HuntRail() {
       symbol: m.symbol,
       px: m.priceUsd,
       change: m.change24h,
-      tag: m.symbol === "SOL" ? "BETA" : "24H",
+      tag: "24H",
     })),
     ...hunt.map((c) => ({
       key: `h-${c.mint}`,
@@ -55,56 +83,38 @@ export function HuntRail() {
       </div>
     </div>
   );
-
-
-function Chip({
-  symbol,
-  px,
-  change,
-  tag,
-}: {
-  symbol: string;
-  px: number;
-  change: number;
-  tag: string;
-}) {
-  const up = change >= 0;
-  return (
-    <div className="flex shrink-0 items-center gap-2 px-2 py-0.5">
-      <span className="font-brand text-[11px] tracking-[0.12em] text-ink">{symbol}</span>
-      <span className="font-mono text-[11px] tabular-nums text-muted">{moneyPx(px)}</span>
-      <span className={up ? "font-mono text-[11px] text-mint" : "font-mono text-[11px] text-halt"}>
-        {pct(change)}
-      </span>
-      <span className="font-ui text-[9px] tracking-[0.14em] text-dim">{tag}</span>
-      <span className="text-line" aria-hidden>
-        /
-      </span>
-    </div>
-  );
 }
 
 export function Markets() {
   const snap = useDesk((s) => s.snap);
   return (
     <section className="border border-line bg-panel p-3">
-      <h2 className="mb-2 font-ui text-[12px] tracking-[0.22em] text-muted">MARKETS</h2>
-      <div className="space-y-1 font-mono text-[12px] tabular-nums">
+      <h2 className="mb-2 font-ui text-[12px] tracking-[0.22em] text-muted">HUNT / CANDIDATES</h2>
+      <div className="max-h-56 space-y-1 overflow-auto font-mono text-[12px] tabular-nums">
+        {snap.hunt.length === 0 && snap.majors.length === 0 ? (
+          <div className="font-ui text-dim">no sellable names this pass</div>
+        ) : null}
+        {snap.hunt.map((c) => (
+          <div key={c.id} className="flex items-center justify-between gap-2 border-b border-line py-1">
+            <span className="w-16 text-magenta">{c.symbol}</span>
+            <span className="text-dim">{c.chain}</span>
+            <span className={c.change1h >= 0 ? "text-mint" : "text-halt"}>{pct(c.change1h)}</span>
+            <span className="text-[10px] text-muted">{c.social}</span>
+            <SellMeter sim={c.sellSim} />
+          </div>
+        ))}
         {snap.majors.map((m) => (
-          <div key={m.symbol} className="flex justify-between gap-3">
-            <span className="text-muted">{m.symbol}</span>
+          <div key={m.symbol} className="flex justify-between gap-3 text-muted">
+            <span>{m.symbol}</span>
             <span>{moneyPx(m.priceUsd)}</span>
-            <span className={m.change24h >= 0 ? "text-mint" : "text-halt"}>
-              {pct(m.change24h)}
-            </span>
+            <span className={m.change24h >= 0 ? "text-mint" : "text-halt"}>{pct(m.change24h)}</span>
           </div>
         ))}
       </div>
-      <p className="mt-2 font-ui text-[10px] tracking-[0.1em] text-dim">
-        Kraken last · house names are not inventory
-      </p>
       {snap.feedError ? (
-        <p className="mt-1 font-ui text-[11px] text-warn">{snap.feedError}</p>
+        <p className="mt-1 truncate font-ui text-[11px] text-warn" title={snap.feedError}>
+          {snap.feedError.length > 80 ? `${snap.feedError.slice(0, 80)}…` : snap.feedError}
+        </p>
       ) : null}
     </section>
   );
