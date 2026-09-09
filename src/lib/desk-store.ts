@@ -1,6 +1,15 @@
 import { create } from "zustand";
-import { applyScan, arm, bootDesk, snapshot, type DeskState } from "./engine/step.ts";
-import type { EngineSnapshot, ScanPayload } from "./types.ts";
+import {
+  applyScan,
+  arm,
+  bootDesk,
+  cosignDestination,
+  cosignFlatten,
+  cosignMoveBanked,
+  snapshot,
+  type DeskState,
+} from "./engine/step.ts";
+import type { BankDestination, EngineSnapshot, ScanPayload } from "./types.ts";
 import {
   accrueDisplay,
   defaultHousehold,
@@ -9,7 +18,6 @@ import {
   withdraw,
   type HouseholdState,
 } from "./household/display-port.ts";
-import type { HouseSymbol } from "./config.ts";
 import { loadSaved, saveSaved } from "./persist.ts";
 
 type View = "desk" | "house";
@@ -30,7 +38,10 @@ type DeskStore = {
   houseDeposit: (amount: number) => void;
   houseWithdraw: (amount: number) => void;
   houseAccrue: (hours: number) => void;
-  setQty: (symbol: HouseSymbol, qty: number) => void;
+  setQty: (symbol: string, qty: number) => void;
+  flattenAll: (now: number) => void;
+  setDestination: (dest: BankDestination, now: number) => void;
+  moveBanked: (cents: number, now: number) => void;
 };
 
 function persist(get: () => DeskStore) {
@@ -96,6 +107,21 @@ export const useDesk = create<DeskStore>((set, get) => ({
   },
   setQty: (symbol, qty) => {
     set({ house: setLedgerQty(get().house, symbol, qty) });
+    persist(get);
+  },
+  flattenAll: (now) => {
+    const next = cosignFlatten(get().desk, now);
+    set({ desk: next, now, snap: snapshot(next, now) });
+    persist(get);
+  },
+  setDestination: (dest, now) => {
+    const next = cosignDestination(get().desk, now, dest);
+    set({ desk: next, now, snap: snapshot(next, now) });
+    persist(get);
+  },
+  moveBanked: (cents, now) => {
+    const next = cosignMoveBanked(get().desk, now, cents);
+    set({ desk: next, now, snap: snapshot(next, now) });
     persist(get);
   },
 }));

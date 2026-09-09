@@ -1,11 +1,8 @@
 import type { DeskState } from "./engine/step.ts";
 import { bootDesk } from "./engine/step.ts";
-import {
-  defaultHousehold,
-  type HouseholdState,
-} from "./household/display-port.ts";
+import { defaultHousehold, type HouseholdState } from "./household/display-port.ts";
 
-const KEY = "agent2.desk.v1";
+const KEY = "agent2.desk.v2";
 
 type Saved = {
   desk: DeskState;
@@ -25,13 +22,20 @@ export function loadSaved(now: number): Saved {
     if (!raw) return fallback;
     const parsed = JSON.parse(raw) as Partial<Saved>;
     if (!parsed.desk?.book) return fallback;
+    const boot = bootDesk(now);
     return {
       desk: {
-        ...bootDesk(now),
+        ...boot,
         ...parsed.desk,
-        tape: parsed.desk.tape?.slice(0, 80) ?? bootDesk(now).tape,
+        liveArmed: false,
+        tape: parsed.desk.tape?.slice(0, 120) ?? boot.tape,
+        book: {
+          ...boot.book,
+          ...parsed.desk.book,
+          paperRungLivePromote: false,
+        },
       },
-      house: { ...defaultHousehold(), ...parsed.house },
+      house: { ...defaultHousehold(), ...parsed.house, ledger: parsed.house?.ledger?.length ? parsed.house.ledger : defaultHousehold().ledger },
       view: parsed.view === "house" ? "house" : "desk",
     };
   } catch {

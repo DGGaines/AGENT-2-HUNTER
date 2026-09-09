@@ -1,6 +1,6 @@
 import { KRAKEN_PAIRS } from "../config.ts";
-import { gateCandidate } from "../engine/gates.ts";
-import type { Candidate, MajorTick } from "../types.ts";
+import { gateCandidate, type RawCandidate } from "../engine/gates.ts";
+import type { Candidate, MacroTick, MajorTick } from "../types.ts";
 
 type GeckoPool = {
   id: string;
@@ -51,6 +51,7 @@ export function poolsToCandidates(
   pools: GeckoPool[],
   included: GeckoToken[],
   now: number,
+  chain: string,
 ): Candidate[] {
   const tokens = new Map(included.map((t) => [t.id, t]));
   const out: Candidate[] = [];
@@ -59,19 +60,23 @@ export function poolsToCandidates(
     const tokId = p.relationships?.base_token?.data?.id;
     const tok = tokId ? tokens.get(tokId) : undefined;
     const mint = tok?.attributes.address ?? p.attributes.address;
-    if (seen.has(mint)) continue;
-    seen.add(mint);
+    const key = `${chain}:${mint}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     const tx = p.attributes.transactions?.h1;
     const pc = p.attributes.price_change_percentage ?? {};
     const vol = p.attributes.volume_usd ?? {};
     const symbol = (tok?.attributes.symbol ?? p.attributes.name.split(" ")[0] ?? "?").toUpperCase();
-    const raw = {
-      id: p.attributes.address,
+    const raw: RawCandidate = {
+      id: `${chain}:${p.attributes.address}`,
       symbol,
       name: tok?.attributes.name ?? p.attributes.name,
       mint,
       pairAddress: p.attributes.address,
       dex: p.relationships?.dex?.data?.id ?? "unknown",
+      chain,
+      venue: `gt:${chain}`,
+      venueKind: "dex",
       priceUsd: num(p.attributes.base_token_price_usd),
       change1h: num(pc.h1),
       change24h: num(pc.h24),
@@ -85,24 +90,94 @@ export function poolsToCandidates(
       fdvUsd: p.attributes.fdv_usd == null ? null : num(p.attributes.fdv_usd),
       decimals: tok?.attributes.decimals ?? 9,
       imageUrl: tok?.attributes.image_url ?? null,
+      intelAsOf: now,
     };
     out.push(gateCandidate(raw));
   }
   return out;
 }
 
+export function cexMarketsToCandidates(
+  rows: Array<{
+    id: string;
+    symbol: string;
+    name: string;
+    current_price: number;
+    price_change_percentage_1h_in_currency?: number;
+    price_change_percentage_24h?: number;
+    total_volume?: number;
+    market_cap?: number;
+    image?: string;
+  }>,
+  now: number,
+): Candidate[] {
+  return rows.map((r) => {
+    const vol = num(r.total_volume);
+    const px = num(r.current_price);
+    return gateCandidate({
+      id: `cex:${r.id}`,
+      symbol: r.symbol.toUpperCase(),
+      name: r.name,
+      mint: r.id,
+      pairAddress: r.id,
+      dex: "cex",
+      chain: "cex",
+      venue: "coingecko-cex",
+      venueKind: "cex",
+      priceUsd: px,
+      change1h: num(r.price_change_percentage_1h_in_currency),
+      change24h: num(r.price_change_percentage_24h),
+      liquidityUsd: vol,
+      volume1h: vol / 24,
+      buys1h: 40,
+      sells1h: 36,
+      buyers1h: 30,
+      sellers1h: 28,
+      pairAgeMin: 10_000,
+      fdvUsd: r.market_cap ?? null,
+      decimals: 8,
+      imageUrl: r.image ?? null,
+      intelAsOf: now,
+    });
+  });
+}
+
 type KrakenTicker = Record<string, { c?: string[]; o?: string }>;
 
 export function krakenToMajors(result: KrakenTicker): MajorTick[] {
   const out: MajorTick[] = [];
-  (Object.keys(KRAKEN_PAIRS) as Array<keyof typeof KRAKEN_PAIRS>).forEach((sym) => {
+  for (const sym of Object.keys(KRAKEN_PAIRS)) {
     const pair = KRAKEN_PAIRS[sym];
-    const row = result[pair];
-    if (!row) return;
+    const row = result[pair] ?? result[`${pair}`];
+    if (!row) continue;
     const last = num(row.c?.[0]);
     const open = num(row.o);
     const change = open > 0 ? ((last - open) / open) * 100 : 0;
     out.push({ symbol: sym, priceUsd: last, change24h: change });
-  });
+  }
+  return out;
+}
+
+export function yahooToMacro(
+  quotes: Array<{ symbol?: string; regularMarketPrice?: number; regularMarketChangePercent?: number }>,
+): MacroTick[] {
+  const map: Record<string, MacroTick["symbol"]> = {
+    "^DJI": "DOW",
+    "GC=F": "GOLD",
+    "SI=F": "SILVER",
+    "CL=F": "OIL",
+  };
+  const out: MacroTick[] = [];
+  for (const q of quotes) {
+    const key = map[q.symbol ?? ""];
+    if (!key) continue;
+    const price = num(q.regularMarketPrice);
+    out.push({
+      symbol: key,
+      price,
+      change: num(q.regularMarketChangePercent),
+      stale: !(price > 0),
+    });
+  }
   return out;
 }

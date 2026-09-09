@@ -33,11 +33,14 @@ export function useDeskLoop() {
         const last = useDesk.getState().desk.lastScan;
         const stale: ScanPayload = {
           asOf: now,
-          source: "geckoterminal+kraken",
+          source: last?.source ?? "gt-multichain+coingecko+kraken+yahoo",
           stale: true,
           error: e instanceof Error ? e.message : "scan failed",
+          latencyMs: 0,
           majors: last?.majors ?? [],
           candidates: last?.candidates ?? [],
+          macro: last?.macro ?? [],
+          houseMarks: last?.houseMarks ?? {},
         };
         ingest(stale, now);
       }

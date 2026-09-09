@@ -8,22 +8,17 @@ export function ScanStrip() {
 
   return (
     <div className="flex flex-wrap items-center gap-3 border-b border-line bg-panel px-3 py-2 lg:px-4">
-      <div className="flex items-center gap-2 font-ui text-[12px] tracking-[0.14em]">
+      <div className="flex flex-wrap items-center gap-2 font-ui text-[12px] tracking-[0.14em]">
         <span
-          className={cn(
-            "size-2 rounded-full",
-            snap.scanning && !snap.stale ? "bg-mint" : "bg-halt",
-          )}
+          className={cn("size-2 rounded-full", snap.scanning && !snap.stale ? "bg-mint" : "bg-halt")}
         />
         <span className={snap.scanning && !snap.stale ? "text-mint" : "text-halt"}>
-          {snap.scanning && !snap.stale ? "SCANNING" : snap.stale ? "STALE" : "IDLE"}
+          {snap.feedHealth}
         </span>
         <span className="text-muted">
-          {snap.universeCount} PAIRS · {snap.passCount} SELLABLE
+          {snap.universeCount} NAMES · {snap.passCount} SELLABLE
         </span>
-        <span className="text-dim">
-          LAST PASS {snap.lastPass ? timeLocal(snap.lastPass) : "—"}
-        </span>
+        <span className="text-dim">LAST PASS {snap.lastPass ? timeLocal(snap.lastPass) : "—"}</span>
         <span
           className={cn(
             "px-2 py-0.5 text-[11px] tracking-[0.16em]",
@@ -37,6 +32,9 @@ export function ScanStrip() {
           {snap.regime}
         </span>
         <span className="hidden text-dim md:inline">{snap.regimeNote}</span>
+        <span className="border border-line px-2 py-0.5 text-[10px] tracking-[0.14em] text-warn">
+          KILL {snap.killRung}
+        </span>
       </div>
 
       <div className="ml-auto flex items-center gap-2">
@@ -57,7 +55,7 @@ export function ScanStrip() {
         <button
           type="button"
           disabled
-          title="Dead. Paper desk. No live adapter."
+          title="Dead. One engine. LiveOrder stub until a single arm."
           className="whitespace-nowrap border border-live-dead px-3 py-1.5 font-brand text-[11px] tracking-[0.2em] text-live-dead"
         >
           LIVE · DEAD

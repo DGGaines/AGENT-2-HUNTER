@@ -163,12 +163,12 @@ export function Constellation({ hunt, majors, seats, scanning }: Props) {
             fontFamily="Rajdhani, sans-serif"
             letterSpacing="0.18em"
           >
-            NO SELLABLE 1H NAMES
+            NO SELLABLE NAMES
           </text>
         ) : null}
       </svg>
       <div className="pointer-events-none absolute bottom-2 left-3 font-ui text-[10px] tracking-[0.14em] text-dim">
-        INNER RING HOUSE · OUTER 1H SELLABLE · SIZE = MOVE
+        INNER RING MAJORS · OUTER HUNT · MAJORS MAY SIT IF THEY CLEAR GATES
       </div>
     </div>
   );

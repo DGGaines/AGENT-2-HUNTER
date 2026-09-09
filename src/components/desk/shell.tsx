@@ -1,9 +1,14 @@
 import { Constellation } from "./constellation";
+import { CosignBar } from "./cosign";
+import { DecisionCard } from "./decision-card";
 import { DeskHeader } from "./header";
 import { Jail } from "./jail";
 import { HuntRail, Markets } from "./markets";
+import { MacroStrip } from "./macro-strip";
+import { MissBoard } from "./miss-board";
 import { ScanStrip } from "./scan-strip";
 import { Seats } from "./seats";
+import { SlipDash } from "./slip-dash";
 import { Tape } from "./tape";
 import { Treasury } from "./treasury";
 import { HouseView } from "@/components/house/house-view";
@@ -34,12 +39,13 @@ export function DeskShell() {
   return (
     <div className="flex min-h-dvh flex-col bg-void">
       <DeskHeader />
+      <MacroStrip />
       <ScanStrip />
       {view === "house" ? (
         <HouseView />
       ) : (
         <>
-          <div className="grid flex-1 grid-cols-1 gap-4 p-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(260px,0.9fr)] lg:p-4">
+          <div className="grid flex-1 grid-cols-1 gap-4 p-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(280px,0.95fr)] lg:p-4">
             <div className="flex min-w-0 flex-col gap-4">
               <Treasury />
               <Constellation
@@ -49,10 +55,14 @@ export function DeskShell() {
                 scanning={ready && snap.scanning}
               />
               <Seats />
+              <MissBoard />
             </div>
             <div className="flex flex-col gap-4">
+              <DecisionCard />
               <Jail />
               <Markets />
+              <SlipDash />
+              <CosignBar />
               <Rules />
             </div>
           </div>
@@ -69,11 +79,12 @@ function Rules() {
     <section className="border border-line bg-panel p-3 font-ui text-[11px] leading-relaxed tracking-[0.04em] text-dim">
       <h2 className="mb-2 text-[12px] tracking-[0.22em] text-muted">LAW</h2>
       <ul className="space-y-1">
-        <li>If it cannot be sold at a $20 clip, it is not a candidate.</li>
-        <li>House names (BTC ETH XRP XLM HBAR) are satellites. Never seats.</li>
-        <li>P&L is net of taker fee, slip, and 22% STCG withhold.</li>
-        <li>START arms paper. LIVE is dead. No order leaves this desk.</li>
-        <li>Empty seats in a hunt regime is a miss, not a win.</li>
+        <li>If it cannot be sold at a $250 clip, it is not a candidate.</li>
+        <li>Any name that clears gates may sit — including BTC ETH XRP XLM HBAR.</li>
+        <li>Empty seats with passers is a MISS. Sideline bias is banned.</li>
+        <li>Rung: $500 banked sacred + $500 recycled. Never raid the bank.</li>
+        <li>START arms paper autonomy. Co-sign only flatten / dest / move banked.</li>
+        <li>LIVE is dead. One engine. LiveOrder plugs in later — no rewrite.</li>
       </ul>
     </section>
   );
