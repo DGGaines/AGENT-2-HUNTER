@@ -111,7 +111,11 @@ export function Markets() {
           </div>
         ))}
       </div>
-      {snap.feedError ? <p className="mt-1 font-ui text-[11px] text-warn">{snap.feedError}</p> : null}
+      {snap.feedError ? (
+        <p className="mt-1 truncate font-ui text-[11px] text-warn" title={snap.feedError}>
+          {snap.feedError.length > 80 ? `${snap.feedError.slice(0, 80)}…` : snap.feedError}
+        </p>
+      ) : null}
     </section>
   );
 }

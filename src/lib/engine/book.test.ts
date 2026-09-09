@@ -20,6 +20,19 @@ test("honeypot shape fires BEFORE generic NO_SELLS", () => {
   assert.equal(noSells.gate, "NO_SELLS");
 });
 
+test("stables are trash — hard refuse", () => {
+  const c = gem({
+    symbol: "USDT",
+    name: "Tether",
+    venueKind: "cex",
+    chain: "cex",
+    venue: "cex",
+    liquidityUsd: 50_000_000,
+    volume1h: 8_000_000,
+  });
+  assert.equal(c.gate, "DENYLIST");
+});
+
 test("house names may sit when they clear gates", () => {
   const c = gem({
     symbol: "XRP",

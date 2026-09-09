@@ -53,8 +53,16 @@ export function classifyBook(c: {
   return "NONE";
 }
 
-function scoreOf(softFlags: string[], social: Candidate["social"], sellSim: Candidate["sellSim"]): number {
-  let s = 0.86;
+const STABLES = new Set(["USDT", "USDC", "DAI", "BUSD", "TUSD", "FDUSD", "USDE", "USDS", "USD1", "PYUSD"]);
+
+function scoreOf(
+  softFlags: string[],
+  social: Candidate["social"],
+  sellSim: Candidate["sellSim"],
+  change1h: number,
+): number {
+  let s = 0.72;
+  s += Math.min(0.22, Math.max(0, change1h) / 80);
   s -= softFlags.length * 0.12;
   if (social === "MIXED") s -= 0.18;
   s -= Math.min(0.2, sellSim.impact * 4);
@@ -76,6 +84,18 @@ function evaluate(c: RawCandidate): {
   const rug = rugStack({ ...c, sellSim, social });
   const impact = sellSim.impact;
   const softFlags: string[] = [];
+
+  if (STABLES.has(c.symbol.toUpperCase())) {
+    return {
+      gate: "DENYLIST",
+      gateNote: "stable — not a hunt seat",
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
+    };
+  }
 
   if (!intelComplete || !(c.priceUsd > 0)) {
     return {
@@ -206,7 +226,7 @@ function evaluate(c: RawCandidate): {
 export function gateCandidate(raw: RawCandidate): Candidate {
   const book = classifyBook(raw);
   const ev = evaluate(raw);
-  const score = ev.gate === "PASS" ? scoreOf(ev.softFlags, ev.social, ev.sellSim) : 0;
+  const score = ev.gate === "PASS" ? scoreOf(ev.softFlags, ev.social, ev.sellSim, raw.change1h) : 0;
   return {
     ...raw,
     impactAtClip: ev.sellSim.impact,

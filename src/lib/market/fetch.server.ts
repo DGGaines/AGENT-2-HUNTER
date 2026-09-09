@@ -1,4 +1,4 @@
-import { DEX_NETWORKS, LEDGER_SEEDS } from "../config.ts";
+import { LEDGER_SEEDS } from "../config.ts";
 import type { Candidate, MacroTick, ScanPayload } from "../types.ts";
 import { cexMarketsToCandidates, krakenToMajors, poolsToCandidates, yahooChartToMacro } from "./parse.ts";
 
@@ -28,7 +28,7 @@ async function getJson(url: string, timeoutMs: number): Promise<unknown> {
       signal: ctrl.signal,
       headers: { Accept: "application/json", "User-Agent": "Agent20PaperDesk/2.0" },
     });
-    if (!res.ok) throw new Error(`${res.status} ${url}`);
+    if (!res.ok) throw new Error(`${res.status}`);
     return await res.json();
   } finally {
     clearTimeout(t);
@@ -39,6 +39,13 @@ type GtBody = {
   data?: unknown[];
   included?: unknown[];
 };
+
+function shortErr(tag: string, reason: unknown): string {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  if (msg.includes("429")) return `${tag} rate-limit`;
+  if (msg.includes("abort")) return `${tag} timeout`;
+  return `${tag} down`;
+}
 
 function mergeCandidates(lists: Candidate[][]): Candidate[] {
   const out: Candidate[] = [];
@@ -63,15 +70,14 @@ export async function fetchScan(now = Date.now()): Promise<ScanPayload> {
   let macro: MacroTick[] = [];
   const houseMarks: ScanPayload["houseMarks"] = {};
 
-  const gtJobs = DEX_NETWORKS.flatMap((net) => [
+  const gtNets = ["solana", "eth", "base", "bsc"] as const;
+  const gtJobs = gtNets.flatMap((net) => [
     { net, url: `${GT}/${net}/trending_pools?include=base_token&page=1` },
-    ...(net === "solana" || net === "eth" || net === "base"
-      ? [{ net, url: `${GT}/${net}/new_pools?include=base_token&page=1` }]
-      : []),
+    ...(net === "solana" || net === "base" ? [{ net, url: `${GT}/${net}/new_pools?include=base_token&page=1` }] : []),
   ]);
 
   const geckoIds = LEDGER_SEEDS.map((l) => l.geckoId).filter(Boolean).join(",");
-  const cgSimple = `https://api.coingecko.com/api/v3/simple/price?ids=${geckoIds}&vs_currencies=usd&include_24hr_change=true`;
+  const cgHouse = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${geckoIds}&per_page=50&page=1&price_change_percentage=24h`;
 
   const macroKeys = Object.keys(YAHOO_CHART) as Array<MacroTick["symbol"]>;
   const [gtResults, ticker, cgGain, cgNew, yahooCharts, simple] = await Promise.all([
@@ -80,13 +86,13 @@ export async function fetchScan(now = Date.now()): Promise<ScanPayload> {
     Promise.allSettled([getJson(CG_MARKETS, 8000)]),
     Promise.allSettled([getJson(CG_NEW, 8000)]),
     Promise.allSettled(macroKeys.map((k) => getJson(YAHOO_CHART[k], 8000))),
-    Promise.allSettled([getJson(cgSimple, 8000)]),
+    Promise.allSettled([getJson(cgHouse, 8000)]),
   ]);
 
   gtResults.forEach((r, i) => {
     const job = gtJobs[i]!;
     if (r.status === "rejected") {
-      errors.push(`${job.net} ${String(r.reason?.message ?? r.reason)}`);
+      errors.push(shortErr(job.net, r.reason));
       return;
     }
     const body = r.value as GtBody;
@@ -118,7 +124,7 @@ export async function fetchScan(now = Date.now()): Promise<ScanPayload> {
         cexMarketsToCandidates(pack.value as Parameters<typeof cexMarketsToCandidates>[0], now),
       );
     } else if (pack?.status === "rejected") {
-      errors.push("coingecko cex");
+      errors.push(shortErr("cex", pack.reason));
     }
   }
 
@@ -132,13 +138,22 @@ export async function fetchScan(now = Date.now()): Promise<ScanPayload> {
   });
 
   const sm = simple[0];
-  if (sm?.status === "fulfilled" && sm.value && typeof sm.value === "object") {
-    const body = sm.value as Record<string, { usd?: number; usd_24h_change?: number }>;
+  if (sm?.status === "fulfilled" && Array.isArray(sm.value)) {
+    const byId = new Map(
+      (sm.value as Array<{ id: string; symbol: string; current_price: number; price_change_percentage_24h?: number }>).map((r) => [r.id, r]),
+    );
     for (const line of LEDGER_SEEDS) {
       if (!line.geckoId) continue;
-      const row = body[line.geckoId];
-      if (row?.usd) houseMarks[line.symbol] = { priceUsd: row.usd, change24h: row.usd_24h_change ?? 0 };
+      const row = byId.get(line.geckoId);
+      if (row?.current_price) {
+        houseMarks[line.symbol] = {
+          priceUsd: row.current_price,
+          change24h: row.price_change_percentage_24h ?? 0,
+        };
+      }
     }
+  } else if (sm?.status === "rejected") {
+    errors.push(shortErr("house-marks", sm.reason));
   }
 
   for (const m of majors) {
