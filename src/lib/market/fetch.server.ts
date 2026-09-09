@@ -1,6 +1,6 @@
 import { DEX_NETWORKS, LEDGER_SEEDS } from "../config.ts";
 import type { Candidate, MacroTick, ScanPayload } from "../types.ts";
-import { cexMarketsToCandidates, krakenToMajors, poolsToCandidates, yahooToMacro } from "./parse.ts";
+import { cexMarketsToCandidates, krakenToMajors, poolsToCandidates, yahooChartToMacro } from "./parse.ts";
 
 const GT = "https://api.geckoterminal.com/api/v2/networks";
 const KRAKEN =
@@ -9,8 +9,12 @@ const CG_MARKETS =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=price_change_percentage_24h_desc&per_page=40&page=1&price_change_percentage=1h,24h";
 const CG_NEW =
   "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=15&page=1&price_change_percentage=1h,24h";
-const YAHOO =
-  "https://query1.finance.yahoo.com/v7/finance/quote?symbols=%5EDJI,GC%3DF,SI%3DF,CL%3DF";
+const YAHOO_CHART: Record<MacroTick["symbol"], string> = {
+  DOW: "https://query1.finance.yahoo.com/v8/finance/chart/%5EDJI?interval=1d&range=2d",
+  GOLD: "https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1d&range=2d",
+  SILVER: "https://query1.finance.yahoo.com/v8/finance/chart/SI%3DF?interval=1d&range=2d",
+  OIL: "https://query1.finance.yahoo.com/v8/finance/chart/CL%3DF?interval=1d&range=2d",
+};
 
 type Cache = { at: number; payload: ScanPayload };
 let cache: Cache | null = null;
@@ -69,12 +73,13 @@ export async function fetchScan(now = Date.now()): Promise<ScanPayload> {
   const geckoIds = LEDGER_SEEDS.map((l) => l.geckoId).filter(Boolean).join(",");
   const cgSimple = `https://api.coingecko.com/api/v3/simple/price?ids=${geckoIds}&vs_currencies=usd&include_24hr_change=true`;
 
-  const [gtResults, ticker, cgGain, cgNew, yahoo, simple] = await Promise.all([
+  const macroKeys = Object.keys(YAHOO_CHART) as Array<MacroTick["symbol"]>;
+  const [gtResults, ticker, cgGain, cgNew, yahooCharts, simple] = await Promise.all([
     Promise.allSettled(gtJobs.map((j) => getJson(j.url, 8000))),
     Promise.allSettled([getJson(KRAKEN, 8000)]),
     Promise.allSettled([getJson(CG_MARKETS, 8000)]),
     Promise.allSettled([getJson(CG_NEW, 8000)]),
-    Promise.allSettled([getJson(YAHOO, 8000)]),
+    Promise.allSettled(macroKeys.map((k) => getJson(YAHOO_CHART[k], 8000))),
     Promise.allSettled([getJson(cgSimple, 8000)]),
   ]);
 
@@ -117,19 +122,14 @@ export async function fetchScan(now = Date.now()): Promise<ScanPayload> {
     }
   }
 
-  const y = yahoo[0];
-  if (y?.status === "fulfilled") {
-    const body = y.value as { quoteResponse?: { result?: Array<{ symbol?: string; regularMarketPrice?: number; regularMarketChangePercent?: number }> } };
-    macro = yahooToMacro(body.quoteResponse?.result ?? []);
-  } else {
-    errors.push("macro yahoo");
-    macro = [
-      { symbol: "DOW", price: 0, change: 0, stale: true },
-      { symbol: "GOLD", price: 0, change: 0, stale: true },
-      { symbol: "SILVER", price: 0, change: 0, stale: true },
-      { symbol: "OIL", price: 0, change: 0, stale: true },
-    ];
-  }
+  macro = macroKeys.map((key, i) => {
+    const row = yahooCharts[i];
+    if (row?.status === "fulfilled") {
+      return yahooChartToMacro(key, row.value as Parameters<typeof yahooChartToMacro>[1]);
+    }
+    errors.push(`macro ${key}`);
+    return { symbol: key, price: 0, change: 0, stale: true };
+  });
 
   const sm = simple[0];
   if (sm?.status === "fulfilled" && sm.value && typeof sm.value === "object") {

@@ -158,26 +158,16 @@ export function krakenToMajors(result: KrakenTicker): MajorTick[] {
   return out;
 }
 
-export function yahooToMacro(
-  quotes: Array<{ symbol?: string; regularMarketPrice?: number; regularMarketChangePercent?: number }>,
-): MacroTick[] {
-  const map: Record<string, MacroTick["symbol"]> = {
-    "^DJI": "DOW",
-    "GC=F": "GOLD",
-    "SI=F": "SILVER",
-    "CL=F": "OIL",
+export function yahooChartToMacro(
+  symbol: MacroTick["symbol"],
+  body: { chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; regularMarketChangePercent?: number } }> } },
+): MacroTick {
+  const meta = body.chart?.result?.[0]?.meta;
+  const price = num(meta?.regularMarketPrice);
+  return {
+    symbol,
+    price,
+    change: num(meta?.regularMarketChangePercent),
+    stale: !(price > 0),
   };
-  const out: MacroTick[] = [];
-  for (const q of quotes) {
-    const key = map[q.symbol ?? ""];
-    if (!key) continue;
-    const price = num(q.regularMarketPrice);
-    out.push({
-      symbol: key,
-      price,
-      change: num(q.regularMarketChangePercent),
-      stale: !(price > 0),
-    });
-  }
-  return out;
 }
