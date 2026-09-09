@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node scripts/with-app-env.mjs vite dev --host 0.0.0.0 --port 8080",
     "desk": "node scripts/with-app-env.mjs vite dev --host 127.0.0.1 --port 8787",
-    "test:engine": "node --experimental-strip-types --test src/lib/engine/book.test.ts src/lib/engine/step.test.ts src/lib/engine/kill.test.ts",
+    "test:engine": "node --experimental-strip-types --test src/lib/engine/book.test.ts src/lib/engine/step.test.ts src/lib/engine/kill.test.ts src/lib/engine/contract.test.ts src/lib/launch.test.ts",
     "build": "node scripts/with-app-env.mjs vite build && npm run db:migrate",
     "db:migrate": "node scripts/migrate.mjs",
     "build:dev": "node scripts/with-app-env.mjs vite build --mode development",

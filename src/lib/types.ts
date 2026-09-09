@@ -20,7 +20,8 @@ export type GateCode =
   | "RUG"
   | "DUMP"
   | "BUNDLE"
-  | "DENYLIST";
+  | "DENYLIST"
+  | "SELL_SIM";
 
 export type KillRung = "clear" | "pause_entries" | "cancel" | "close_only" | "flatten" | "kill";
 

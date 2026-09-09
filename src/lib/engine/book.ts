@@ -15,6 +15,7 @@ import {
   TRAIL_GIVEBACK_PCT,
 } from "../config.ts";
 import { paperFill, type FillPort } from "../ports/fill.ts";
+import { intelFresh } from "../ports/intel.ts";
 import type { Book, Candidate, ExitReason, Fill, Seat } from "../types.ts";
 import { canEnter } from "./gates.ts";
 import { rid } from "./ids.ts";
@@ -86,6 +87,8 @@ export function enter(
   now: number,
   port: FillPort = paperFill,
 ): EnterResult {
+  if (!(c.intelAsOf > 0)) return { ok: false, book, reason: "missing intel" };
+  if (!intelFresh(c.intelAsOf, now)) return { ok: false, book, reason: "stale intel" };
   if (!canEnter(c)) return { ok: false, book, reason: `gate ${c.gate}` };
   if (book.seats.length >= seatCapacity(book)) {
     return { ok: false, book, reason: "full" };
@@ -139,7 +142,7 @@ export function enter(
     clipCents: clip,
     reason: fill.reason,
     intel: {
-      asOf: c.intelAsOf || now,
+      asOf: c.intelAsOf,
       complete: c.intelComplete,
       social: c.social,
       rug: c.rug,

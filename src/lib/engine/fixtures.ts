@@ -1,7 +1,7 @@
-import type { Candidate, ScanPayload } from "../types.ts";
+import type { Candidate, RugFlag, ScanPayload } from "../types.ts";
 import { gateCandidate } from "./gates.ts";
 
-export function gem(over: Partial<Candidate> = {}): Candidate {
+export function gem(over: Partial<Candidate> & { observedFlags?: RugFlag[] } = {}): Candidate {
   return gateCandidate({
     id: over.id ?? "p1",
     symbol: over.symbol ?? "GEM",
@@ -25,9 +25,10 @@ export function gem(over: Partial<Candidate> = {}): Candidate {
     fdvUsd: over.fdvUsd ?? 100_000,
     decimals: over.decimals ?? 6,
     imageUrl: over.imageUrl ?? null,
-    intelAsOf: over.intelAsOf ?? Date.UTC(2026, 8, 9, 14, 0, 0),
+    intelAsOf: over.intelAsOf !== undefined ? over.intelAsOf : Date.UTC(2026, 8, 9, 14, 0, 0),
     deployerId: over.deployerId,
     cluster: over.cluster,
+    observedFlags: over.observedFlags,
   });
 }
 

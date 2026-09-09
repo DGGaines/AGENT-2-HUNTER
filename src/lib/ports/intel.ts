@@ -11,9 +11,6 @@ import {
   INTEL_STALE_MS,
   MAX_BUY_SELL_RATIO,
   MAX_CLIP_IMPACT,
-  MIN_H1_SELLS,
-  MIN_H1_TXNS,
-  MIN_H1_VOL_USD,
   MIN_LIQ_USD,
 } from "../config.ts";
 import type { Candidate, RugFlag, RugVerdict, SellSim, SocialTag } from "../types.ts";
@@ -37,11 +34,7 @@ export function sellSimAtClip(
   const clipUsd = clipCents / 100;
   const depth = c.venueKind === "cex" ? Math.max(c.liquidityUsd, c.volume1h * 8) : c.liquidityUsd;
   const impact = depth > 0 ? clipUsd / depth : 1;
-  const canExit =
-    c.priceUsd > 0 &&
-    depth >= MIN_LIQ_USD &&
-    impact <= MAX_CLIP_IMPACT &&
-    (c.venueKind === "cex" || c.sells1h >= MIN_H1_SELLS);
+  const canExit = c.priceUsd > 0 && depth >= MIN_LIQ_USD && impact <= MAX_CLIP_IMPACT;
   return {
     canExit,
     impact,
@@ -81,8 +74,9 @@ export function rugStack(c: {
   liquidityUsd: number;
   sellSim: SellSim;
   social: SocialTag;
+  observedFlags?: RugFlag[];
 }): RugVerdict {
-  const flags: RugFlag[] = [];
+  const flags: RugFlag[] = [...(c.observedFlags ?? [])];
   const id = `${c.mint} ${c.symbol} ${c.name}`.toLowerCase();
   if ([...PUBLIC_DENY].some((d) => id.includes(d))) flags.push("DENYLIST");
   if (!c.sellSim.canExit) flags.push("SELL_SIM_FAIL");
@@ -138,5 +132,5 @@ export function tapeComplete(c: {
 }): boolean {
   if (!(c.priceUsd > 0)) return false;
   if (c.venueKind === "cex") return c.volume1h > 0 || c.liquidityUsd > 0;
-  return c.liquidityUsd > 0 && (c.buys1h + c.sells1h > 0 || c.volume1h >= MIN_H1_VOL_USD || c.liquidityUsd >= MIN_LIQ_USD);
+  return c.liquidityUsd > 0 && c.buys1h + c.sells1h > 0;
 }

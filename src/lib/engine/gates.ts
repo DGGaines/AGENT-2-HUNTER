@@ -33,6 +33,7 @@ export type RawCandidate = Omit<
   intelAsOf?: number;
   deployerId?: string;
   cluster?: string;
+  observedFlags?: Candidate["rug"]["flags"];
 };
 
 export function impactAtClip(liquidityUsd: number, clipCents = CLIP_CENTS): number {
@@ -81,7 +82,7 @@ function evaluate(c: RawCandidate): {
   const intelComplete = tapeComplete(c);
   const sellSim = sellSimAtClip(c);
   const social = socialTag(c);
-  const rug = rugStack({ ...c, sellSim, social });
+  const rug = rugStack({ ...c, sellSim, social, observedFlags: c.observedFlags });
   const impact = sellSim.impact;
   const softFlags: string[] = [];
 
@@ -130,10 +131,10 @@ function evaluate(c: RawCandidate): {
   if (rug.flags.includes("DENYLIST")) {
     return { gate: "DENYLIST", gateNote: "public deny list", softFlags, social, rug, sellSim, intelComplete };
   }
-  if (social === "INFLUENCER_DUMP") {
+  if (social === "INFLUENCER_DUMP" || social === "MIXED") {
     return {
       gate: "DUMP",
-      gateNote: "INFLUENCER_DUMP — hard refuse",
+      gateNote: `${social} — sketchy/dump hard refuse`,
       softFlags,
       social,
       rug,
@@ -156,9 +157,20 @@ function evaluate(c: RawCandidate): {
       intelComplete,
     };
   }
+  if (!sellSim.canExit) {
+    return {
+      gate: "SELL_SIM",
+      gateNote: sellSim.note,
+      softFlags,
+      social,
+      rug,
+      sellSim,
+      intelComplete,
+    };
+  }
   if (impact > MAX_CLIP_IMPACT) {
     return {
-      gate: "IMPACT",
+      gate: "SELL_SIM",
       gateNote: `clip is ${(impact * 100).toFixed(1)}% of depth (max ${MAX_CLIP_IMPACT * 100}%)`,
       softFlags,
       social,
@@ -200,17 +212,12 @@ function evaluate(c: RawCandidate): {
       intelComplete,
     };
   }
-  if (!sellSim.canExit) {
-    return { gate: "IMPACT", gateNote: sellSim.note, softFlags, social, rug, sellSim, intelComplete };
-  }
-
   if (c.venueKind === "dex" && c.buys1h + c.sells1h < MIN_H1_TXNS) {
     softFlags.push("LOW_TXNS");
   }
   if (c.volume1h < MIN_H1_VOL_USD) {
     softFlags.push("LOW_VOL");
   }
-  if (social === "MIXED") softFlags.push("MIXED");
 
   return {
     gate: "PASS",
@@ -246,7 +253,7 @@ export function gateCandidate(raw: RawCandidate): Candidate {
 }
 
 export function canEnter(c: Candidate): boolean {
-  return c.gate === "PASS" && c.intelComplete;
+  return c.gate === "PASS" && c.intelComplete && c.intelAsOf > 0;
 }
 
 export function hardRefuse(c: Candidate): boolean {

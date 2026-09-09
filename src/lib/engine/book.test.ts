@@ -9,8 +9,10 @@ import { quarterKellyClip } from "./kelly.ts";
 test("PASS gate only when sellable at clip", () => {
   const ok = gem();
   assert.equal(ok.gate, "PASS");
-  const thin = gem({ liquidityUsd: 100, volume1h: 8_000, sells1h: 30 });
+  const thin = gem({ liquidityUsd: 100, volume1h: 400, sells1h: 30, pairAgeMin: 200 });
   assert.equal(thin.gate, "THIN_LP");
+  assert.notEqual(thin.gate, "DUMP");
+  assert.notEqual(thin.gate, "SELL_SIM");
 });
 
 test("honeypot shape fires BEFORE generic NO_SELLS", () => {
@@ -83,24 +85,30 @@ test("enter then exit: cash, qty, fees, tax, lot ledger agree", () => {
 });
 
 test("refuse enter when gate fails", () => {
-  const now = 1;
+  const now = Date.UTC(2026, 8, 9, 12, 0, 0);
   const book = emptyBook(now);
-  const c = gem({ liquidityUsd: 10 });
+  const c = gem({ liquidityUsd: 10, volume1h: 400, pairAgeMin: 200, intelAsOf: now });
+  assert.equal(c.gate, "THIN_LP");
   const res = enter(book, c, now);
   assert.equal(res.ok, false);
-  if (res.ok) return;
+  if (res.ok) throw new Error("thin LP must refuse enter");
+  assert.equal(res.reason, "gate THIN_LP");
   assert.equal(res.book.cashCents, PAPER_SEED_CENTS);
   assert.equal(res.book.seats.length, 0);
 });
 
 test("cannot spend the reserve or raid the bank", () => {
-  const now = 1;
+  const now = Date.UTC(2026, 8, 9, 12, 0, 0);
   let book = emptyBook(now);
   book = { ...book, cashCents: RESERVE_CENTS + 500, bankedCents: 80_000 };
-  const c = gem();
+  const c = gem({ intelAsOf: now });
+  assert.equal(c.gate, "PASS");
   const res = enter(book, c, now);
   assert.equal(res.ok, false);
+  if (res.ok) throw new Error("reserve must block enter");
+  assert.match(res.reason, /kelly dust|frozen|cash after reserve/);
   assert.equal(book.bankedCents, 80_000);
+  assert.equal(res.book.bankedCents, 80_000);
   assert.equal(deployableCash(book), 500);
 });
 
@@ -121,9 +129,9 @@ test("rung banks $500 and recycles $500; +2 seats; not live-promotable", () => {
 });
 
 test("freeze new entries when underfunded — do not flatten to 15", () => {
-  const now = 1;
+  const now = Date.UTC(2026, 8, 9, 12, 0, 0);
   let book = emptyBook(now);
-  const seats = Array.from({ length: 17 }, (_, i) => ({
+  const seats = Array.from({ length: 16 }, (_, i) => ({
     ...emptyBook(now).seats[0],
     id: `s${i}`,
     symbol: `S${i}`,
@@ -172,10 +180,14 @@ test("freeze new entries when underfunded — do not flatten to 15", () => {
     seats,
   };
   assert.equal(seatCapacity(book), 17);
-  assert.equal(book.seats.length, 17);
-  const res = enter(book, gem({ mint: "fresh", id: "fresh", symbol: "NEW" }), now);
+  assert.equal(book.seats.length, 16);
+  const res = enter(book, gem({ mint: "fresh", id: "fresh", symbol: "NEW", intelAsOf: now }), now);
   assert.equal(res.ok, false);
-  assert.equal(res.book.seats.length, 17);
+  if (res.ok) throw new Error("underfunded book must refuse a new seat");
+  assert.match(res.reason, /kelly dust|frozen|cash after reserve/);
+  assert.notEqual(res.reason, "full");
+  assert.equal(res.book.seats.length, 16);
+  assert.ok(res.book.seats.length > SEAT_FLOOR);
 });
 
 test("¼-Kelly shrinks under clip and never expands it", () => {

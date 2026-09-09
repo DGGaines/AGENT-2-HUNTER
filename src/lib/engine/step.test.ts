@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLIP_CENTS, PAPER_SEED_CENTS, SEAT_FLOOR } from "../config.ts";
-import { emptyBook } from "./book.ts";
+import { CLIP_CENTS, PAPER_SEED_CENTS, RESERVE_CENTS, SEAT_FLOOR } from "../config.ts";
+import { deployableCash, emptyBook, seatCapacity } from "./book.ts";
 import { gem, scanOf } from "./fixtures.ts";
 import { evaluateKill } from "./kill.ts";
 import { applyScan, arm, bootDesk, snapshot } from "./step.ts";
@@ -15,7 +15,8 @@ test("armed hunt takes a clip on a sellable name — even in FLAT (no sideline)"
   assert.equal(desk.book.seats.length, 0);
   desk = arm(desk, now, true);
   desk = applyScan(desk, scan, now + 1);
-  assert.equal(desk.book.seats.length > 0, true);
+  assert.equal(desk.book.seats.length, 1);
+  assert.equal(desk.book.seats[0]!.mint, "m0");
   assert.equal(desk.book.cashCents < PAPER_SEED_CENTS, true);
   assert.ok(desk.book.seats[0]!.clipCents <= CLIP_CENTS);
 });
@@ -109,7 +110,7 @@ test("kill flatten+halt empties seats and refuses START climb", () => {
   const names = [gem({ intelAsOf: now })];
   let desk = arm(bootDesk(now), now, true);
   desk = applyScan(desk, scanOf(names, now), now + 1);
-  assert.equal(desk.book.seats.length > 0, true);
+  assert.equal(desk.book.seats.length, 1);
   desk = { ...desk, failedOrders: 5 };
   desk = applyScan(desk, scanOf(names, now + 2), now + 2);
   assert.equal(desk.book.seats.length, 0);
@@ -133,8 +134,8 @@ test("seat floor is 15 not a 4-seat ceiling", () => {
   );
   let desk = arm(bootDesk(now), now, true);
   desk = applyScan(desk, scanOf(names, now), now + 1);
-  assert.ok(desk.book.seats.length >= 1);
-  assert.ok(desk.book.seats.length <= SEAT_FLOOR);
+  assert.equal(desk.book.seats.length, SEAT_FLOOR);
+  assert.ok(desk.book.seats.length > 4);
   assert.equal(snapshot(desk, now + 1).seatCapacity, SEAT_FLOOR);
 });
 
@@ -151,4 +152,7 @@ test("empty book starts at seed / reserve / 15 floor", () => {
   assert.equal(b.cashCents, PAPER_SEED_CENTS);
   assert.equal(b.bankedCents, 0);
   assert.equal(b.rungsTaken, 0);
+  assert.equal(seatCapacity(b), SEAT_FLOOR);
+  assert.equal(deployableCash(b), PAPER_SEED_CENTS - RESERVE_CENTS);
+  assert.equal(b.seats.length, 0);
 });

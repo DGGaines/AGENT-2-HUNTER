@@ -115,7 +115,7 @@ function pruneJail(prev: JailEntry[], now: number): JailEntry[] {
 }
 
 function jailHard(candidates: Candidate[], prev: JailEntry[], now: number): JailEntry[] {
-  const hard = new Set(["NO_SELLS", "HONEYPOT_SHAPE", "THIN_LP", "IMPACT", "RUG", "DUMP", "BUNDLE", "DENYLIST", "WASH"]);
+  const hard = new Set(["NO_SELLS", "HONEYPOT_SHAPE", "THIN_LP", "IMPACT", "SELL_SIM", "RUG", "DUMP", "BUNDLE", "DENYLIST", "WASH"]);
   const map = new Map(pruneJail(prev, now).map((j) => [j.mint, j]));
   for (const c of candidates) {
     if (hard.has(c.gate)) {
@@ -271,7 +271,7 @@ export function applyScan(state: DeskState, scan: ScanPayload, now: number, port
   marks = marksFrom(scan, book, mismatch);
   const passers = scan.candidates
     .filter(canEnter)
-    .filter((c) => intelFresh(c.intelAsOf || scan.asOf, now))
+    .filter((c) => c.intelAsOf > 0 && intelFresh(c.intelAsOf, now))
     .sort((a, b) => {
       const ac = chase.some((ch) => ch.mint === a.mint) ? 1 : 0;
       const bc = chase.some((ch) => ch.mint === b.mint) ? 1 : 0;
