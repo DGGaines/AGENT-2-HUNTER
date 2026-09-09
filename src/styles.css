@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+@theme {
+  --color-void: #07060c;
+  --color-panel: #0c0b14;
+  --color-well: #05040a;
+  --color-ink: #f2ecf6;
+  --color-muted: #8a8296;
+  --color-dim: #5c5568;
+  --color-line: #2a2038;
+  --color-magenta: #ff2ccb;
+  --color-magenta-dim: #9a1880;
+  --color-mint: #3dffc0;
+  --color-mint-dim: #1a8f6e;
+  --color-halt: #ff3b5c;
+  --color-warn: #c4a44a;
+  --color-live-dead: #4a4458;
+  --font-brand: "Orbitron", sans-serif;
+  --font-ui: "Rajdhani", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --radius-desk: 0.25rem;
+}
+
+@layer base {
+  html,
+  body,
+  #app {
+    min-height: 100%;
+    background: var(--color-void);
+    color: var(--color-ink);
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: var(--font-ui);
+    letter-spacing: 0.02em;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@keyframes pulse-heart {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.86);
+  }
+}
+
+@keyframes scan-sweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px rgba(61, 255, 192, 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(61, 255, 192, 0.8));
+  }
+}
+
+@keyframes tape-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ticker-move {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.heart-beat {
+  animation: pulse-heart 1.2s ease-in-out infinite;
+}
+
+.scan-beam {
+  animation: scan-sweep 6s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+.bubble-live {
+  animation: breathe 2.8s ease-in-out infinite;
+}
+
+.tape-row {
+  animation: tape-in 180ms ease-out;
+}
+
+.ticker {
+  overflow: hidden;
+  border-top: 1px solid var(--color-line);
+  background: var(--color-panel);
+}
+
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker-move 24s linear infinite;
+}
+
+.ticker-set {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  min-width: 100vw;
+  gap: 0.25rem;
+  padding: 0.4rem 1.25rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heart-beat,
+  .scan-beam,
+  .bubble-live,
+  .tape-row,
+  .ticker-track {
+    animation: none;
+  }
+}

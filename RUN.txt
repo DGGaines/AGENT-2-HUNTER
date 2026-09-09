@@ -1,0 +1,17 @@
+AGENT 2.0 — paper hunter desk
+=============================
+
+Need: Node.js 22 or newer  https://nodejs.org
+
+Windows
+  1. Unzip the folder (keep the whole folder together)
+  2. Right-click pin-to-desktop.ps1 -> Run with PowerShell
+     or double-click start-desk.bat
+  3. Desktop icon "AGENT 2.0" starts the desk and opens the browser
+     Port 8787. Stop the old Agent 2.0 if that port is taken.
+
+Paper only. LIVE is dead. START arms $20 clips off the live Solana tape.
+HOUSE is Ledger + X Money display. ADD/OUT do not move paper cash.
+
+npm run test:engine
+  cash / qty / fees / tax / "armed hunt takes a seat"
