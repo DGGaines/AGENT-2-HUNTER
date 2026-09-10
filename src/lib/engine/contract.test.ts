@@ -307,7 +307,7 @@ test("9 X Money ADD/OUT never mutates paper cash or the book", () => {
   assert.notEqual(after.house.xMoney.balance, after.desk.book.cashCents / 100);
 });
 
-test("10 INFLUENCER_DUMP and MIXED hard-refuse even when depth would sell", () => {
+test("10 INFLUENCER_DUMP hard-refuse stays; MIXED sellable pump is soft size-down", () => {
   const dump = gem({
     symbol: "KOL",
     liquidityUsd: 80_000,
@@ -337,8 +337,27 @@ test("10 INFLUENCER_DUMP and MIXED hard-refuse even when depth would sell", () =
   });
   assert.equal(mixed.sellSim.canExit, true);
   assert.equal(mixed.social, "MIXED");
-  assert.equal(mixed.gate, "DUMP");
-  assert.equal(enter(emptyBook(T0), mixed, T0).ok, false);
+  assert.equal(mixed.gate, "PASS");
+  assert.notEqual(mixed.gate, "DUMP");
+  assert.ok(mixed.softFlags.includes("MIXED"));
+  assert.match(mixed.gateNote, /size down/);
+  const organicTwin = gem({
+    symbol: "BOOST",
+    liquidityUsd: 80_000,
+    volume1h: 12_000,
+    pairAgeMin: 30,
+    change1h: 10,
+    buys1h: 40,
+    sells1h: 30,
+    buyers1h: 30,
+    intelAsOf: T0,
+  });
+  assert.equal(organicTwin.social, "ORGANIC");
+  assert.ok(mixed.score < organicTwin.score, "MIXED score-down feeds ¼-Kelly shrink-only clip");
+  const mixedEnter = enter(emptyBook(T0), mixed, T0);
+  assert.equal(mixedEnter.ok, true);
+  if (!mixedEnter.ok) throw new Error("MIXED sellable pump must enter");
+  assert.ok(mixedEnter.book.seats[0]!.clipCents <= CLIP_CENTS);
 });
 
 test("11 co-sign required for flatten-all and move-banked; START does not bypass", () => {

@@ -131,7 +131,10 @@ function evaluate(c: RawCandidate): {
   if (rug.flags.includes("DENYLIST")) {
     return { gate: "DENYLIST", gateNote: "public deny list", softFlags, social, rug, sellSim, intelComplete };
   }
-  if (social === "INFLUENCER_DUMP" || social === "MIXED") {
+  // MIXED = soft / size-down only. scoreOf already −0.18; softFlag −0.12;
+  // enter() sizes via quarterKellyClip(deployable, score) under CLIP_CENTS.
+  // INFLUENCER_DUMP stays hard refuse.
+  if (social === "INFLUENCER_DUMP") {
     return {
       gate: "DUMP",
       gateNote: `${social} — sketchy/dump hard refuse`,
@@ -142,6 +145,7 @@ function evaluate(c: RawCandidate): {
       intelComplete,
     };
   }
+  if (social === "MIXED") softFlags.push("MIXED");
   if (rug.hard && rug.flags.includes("WASH") === false && rug.flags.includes("GOPLUS") === false) {
     return { gate: "RUG", gateNote: rug.note, softFlags, social, rug, sellSim, intelComplete };
   }
