@@ -217,7 +217,7 @@ export function exit(
   return { ok: true, book: applyRungs(next), fill, paperBps: report.paperBps };
 }
 
-/** $1k fully-net realized → $500 banked (sacred) + $500 recycled. Never raid bank. Never auto-promote to live. */
+/** $1k fully-net realized → $500 banked (sacred) + $500 recycled. Defer when cash cannot fund the bank. Never raid bank. Never auto-promote to live. */
 export function applyRungs(book: Book): Book {
   const due = Math.floor(book.realizedAfterTaxCents / RUNG_CENTS);
   if (due <= book.rungsTaken) return { ...book, paperRungLivePromote: false };
@@ -226,6 +226,7 @@ export function applyRungs(book: Book): Book {
   let banked = book.bankedCents;
   while (rungs < due) {
     const take = Math.min(RUNG_BANK_CENTS, Math.max(0, cash - RESERVE_CENTS));
+    if (take < RUNG_BANK_CENTS) break;
     cash -= take;
     banked += take;
     rungs += 1;
