@@ -42,6 +42,7 @@ function ammImpact(clipUsd: number, liquidityUsd: number): number {
   return clipUsd / liquidityUsd;
 }
 
+/** Fill px carries AMM impact and SLIP_BPS. Cash must not also debit slipCents. */
 function paperPx(side: "buy" | "sell", mark: number, impact: number): number {
   const slip = SLIP_BPS / 10_000;
   if (side === "buy") return mark * (1 + impact + slip);
@@ -73,7 +74,8 @@ export const paperFill: FillPort = {
 
     const fee = applyBps(notional, TAKER_FEE_BPS);
     const slip = applyBps(notional, SLIP_BPS);
-    const gain = intent.side === "sell" ? notional - fee - slip - (intent.costCents ?? 0) : 0;
+    // Slip is already in px/notional. Lot slipCents stays for the ledger; do not subtract it again.
+    const gain = intent.side === "sell" ? notional - fee - (intent.costCents ?? 0) : 0;
     const tax = intent.side === "sell" ? withholdStcg(gain) : 0;
     const fill: Fill = {
       id: rid("f"),

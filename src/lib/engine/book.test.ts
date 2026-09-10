@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CLIP_CENTS, PAPER_SEED_CENTS, RESERVE_CENTS, RUNG_BANK_CENTS, SEAT_FLOOR, STCG_RATE } from "../config.ts";
+import { CLIP_CENTS, PAPER_SEED_CENTS, RESERVE_CENTS, RUNG_BANK_CENTS, SEAT_FLOOR, SLIP_BPS, STCG_RATE } from "../config.ts";
 import { liveOrder } from "../ports/fill.ts";
-import { applyRungs, deployableCash, emptyBook, enter, exit, equityNet, seatCapacity } from "./book.ts";
+import { applyRungs, deployableCash, emptyBook, enter, exit, equityNet, markSeats, seatCapacity } from "./book.ts";
 import { gem } from "./fixtures.ts";
 import { quarterKellyClip } from "./kelly.ts";
 
@@ -54,6 +54,7 @@ test("enter then exit: cash, qty, fees, tax, lot ledger agree", () => {
   const now = Date.UTC(2026, 8, 9, 12, 0, 0);
   let book = emptyBook(now);
   const c = gem({ intelAsOf: now });
+  const priorBuy = equityNet(book, {});
   const bought = enter(book, c, now);
   assert.equal(bought.ok, true);
   if (!bought.ok) return;
@@ -69,11 +70,19 @@ test("enter then exit: cash, qty, fees, tax, lot ledger agree", () => {
   const debit = PAPER_SEED_CENTS - book.cashCents;
   assert.equal(debit > CLIP_CENTS * 0.5, true);
   assert.ok(bought.fill.notionalCents <= CLIP_CENTS);
+  assert.equal(book.cashCents, PAPER_SEED_CENTS - bought.fill.notionalCents - bought.fill.feeCents);
+  const buyMarks = { [c.mint]: c.priceUsd };
+  const buyMarkValue = markSeats(book.seats, buyMarks);
+  const buyEmbedded = bought.fill.notionalCents - buyMarkValue;
+  assert.ok(buyEmbedded > 0);
+  assert.equal(equityNet(book, buyMarks), priorBuy - bought.fill.feeCents - buyEmbedded);
 
   const mark = c.priceUsd * 1.5;
+  const priorSell = equityNet(book, { [c.mint]: mark });
   const sold = exit(book, book.seats[0]!.id, mark, now + 60_000, "trail", c.liquidityUsd);
   assert.equal(sold.ok, true);
   if (!sold.ok) return;
+  const sellEmbedded = markSeats(book.seats, { [c.mint]: mark }) - sold.fill.notionalCents;
   book = sold.book;
   assert.equal(book.seats.length, 0);
   assert.equal(sold.fill.taxCents > 0, true);
@@ -82,6 +91,77 @@ test("enter then exit: cash, qty, fees, tax, lot ledger agree", () => {
   void STCG_RATE;
   const eq = equityNet(book, {});
   assert.equal(eq, book.cashCents + book.taxHoldCents + book.bankedCents);
+  assert.ok(sellEmbedded > 0);
+  assert.equal(eq, priorSell - sold.fill.feeCents - sellEmbedded);
+});
+
+test("one slip model: impact+SLIP in fill px; cash does not also take slipCents", () => {
+  const now = Date.UTC(2026, 8, 9, 12, 0, 0);
+  const book = emptyBook(now);
+  const c = gem({ intelAsOf: now, priceUsd: 1, liquidityUsd: 80_000 });
+  const priorBuy = equityNet(book, {});
+  const bought = enter(book, c, now);
+  assert.equal(bought.ok, true);
+  if (!bought.ok) throw new Error("enter must fill");
+  assert.ok(bought.fill.slipCents > 0);
+  assert.ok(bought.fill.feeCents > 0);
+  assert.ok(bought.fill.impactBps > 0);
+  assert.equal(bought.paperBps, bought.fill.impactBps + SLIP_BPS);
+  assert.equal(
+    bought.book.cashCents,
+    book.cashCents - bought.fill.notionalCents - bought.fill.feeCents,
+  );
+  assert.notEqual(
+    bought.book.cashCents,
+    book.cashCents - bought.fill.notionalCents - bought.fill.feeCents - bought.fill.slipCents,
+  );
+
+  const buyMarks = { [c.mint]: c.priceUsd };
+  const buyMarkValue = markSeats(bought.book.seats, buyMarks);
+  const buyEmbedded = bought.fill.notionalCents - buyMarkValue;
+  assert.ok(buyEmbedded > 0);
+  assert.equal(equityNet(bought.book, buyMarks), priorBuy - bought.fill.feeCents - buyEmbedded);
+
+  const sellMark = c.priceUsd * 1.2;
+  const priorSell = equityNet(bought.book, { [c.mint]: sellMark });
+  const sold = exit(bought.book, bought.book.seats[0]!.id, sellMark, now + 60_000, "trail", c.liquidityUsd);
+  assert.equal(sold.ok, true);
+  if (!sold.ok) throw new Error("exit must fill");
+  assert.ok(sold.fill.slipCents > 0);
+  assert.equal(
+    sold.book.cashCents + sold.book.bankedCents + sold.book.taxHoldCents,
+    bought.book.cashCents +
+      bought.book.bankedCents +
+      bought.book.taxHoldCents +
+      sold.fill.notionalCents -
+      sold.fill.feeCents,
+  );
+  assert.notEqual(
+    sold.book.cashCents + sold.book.bankedCents + sold.book.taxHoldCents,
+    bought.book.cashCents +
+      bought.book.bankedCents +
+      bought.book.taxHoldCents +
+      sold.fill.notionalCents -
+      sold.fill.feeCents -
+      sold.fill.slipCents,
+  );
+  const sellEmbedded = markSeats(bought.book.seats, { [c.mint]: sellMark }) - sold.fill.notionalCents;
+  assert.ok(sellEmbedded > 0);
+  assert.equal(equityNet(sold.book, {}), priorSell - sold.fill.feeCents - sellEmbedded);
+  assert.equal(sold.book.seats.length, 0);
+
+  const down = enter(emptyBook(now), c, now);
+  assert.equal(down.ok, true);
+  if (!down.ok) throw new Error("second enter must fill");
+  const lossMark = c.priceUsd * 0.7;
+  const priorLoss = equityNet(down.book, { [c.mint]: lossMark });
+  const lost = exit(down.book, down.book.seats[0]!.id, lossMark, now + 60_000, "stop", c.liquidityUsd);
+  assert.equal(lost.ok, true);
+  if (!lost.ok) throw new Error("loss exit must fill");
+  assert.equal(lost.fill.taxCents, 0);
+  const lossEmbedded = markSeats(down.book.seats, { [c.mint]: lossMark }) - lost.fill.notionalCents;
+  assert.ok(lossEmbedded > 0);
+  assert.equal(equityNet(lost.book, {}), priorLoss - lost.fill.feeCents - lossEmbedded);
 });
 
 test("refuse enter when gate fails", () => {
