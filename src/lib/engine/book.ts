@@ -116,7 +116,8 @@ export function enter(
   );
   if (!report.ok) return { ok: false, book, reason: report.reason };
   const fill = report.fill;
-  const debit = fill.notionalCents + fill.feeCents + fill.slipCents;
+  // Slip lives in fill.px (impact + SLIP_BPS). Do not debit slipCents again.
+  const debit = fill.notionalCents + fill.feeCents;
   if (debit > deployableCash(book)) {
     return { ok: false, book, reason: "cash after reserve" };
   }
@@ -197,7 +198,8 @@ export function exit(
   );
   if (!report.ok) return { ok: false, book, reason: report.reason };
   const fill = report.fill;
-  const proceeds = Math.max(0, fill.notionalCents - fill.feeCents - fill.slipCents);
+  // Notional is already slipped via fill.px. Fee is the only cash haircut.
+  const proceeds = Math.max(0, fill.notionalCents - fill.feeCents);
   const netToCash = proceeds - fill.taxCents;
   const gain = proceeds - seat.costCents;
   const next: Book = {
