@@ -208,6 +208,22 @@ test("rung banks $500 and recycles $500; +2 seats; not live-promotable", () => {
   assert.equal(seatCapacity(book), SEAT_FLOOR + 2);
 });
 
+test("rung defers when cash sits on reserve and cannot fund the $500 bank", () => {
+  const now = 1;
+  let book = emptyBook(now);
+  book = {
+    ...book,
+    cashCents: RESERVE_CENTS,
+    realizedAfterTaxCents: 100_000,
+  };
+  book = applyRungs(book);
+  assert.equal(book.rungsTaken, 0);
+  assert.equal(book.bankedCents, 0);
+  assert.equal(book.cashCents, RESERVE_CENTS);
+  assert.equal(seatCapacity(book), SEAT_FLOOR);
+  assert.equal(book.paperRungLivePromote, false);
+});
+
 test("freeze new entries when underfunded — do not flatten to 15", () => {
   const now = Date.UTC(2026, 8, 9, 12, 0, 0);
   let book = emptyBook(now);
